@@ -1,0 +1,39 @@
+# --- Node.js / Next.js ---
+node_modules/
+.next/
+dist/
+build/
+.pnp
+.pnp.js
+out/
+
+# --- Python / Flask ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+env/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# --- Environment & Secret Files ---
+.env
+.env.local
+.env*.local
+
+# --- IDEs & Editors ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- OS Specific Files ---
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
