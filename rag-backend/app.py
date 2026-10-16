@@ -109,7 +109,7 @@ def health_check():
 
 
 @app.post("/api/upload")
-async def upload_file(file: UploadFile = File(...), background_tasks: BackgroundTasks = None):
+async def upload_file(file: UploadFile = File(...)):
     temp_path = f"./temp_{file.filename}"
     
     try:
@@ -117,19 +117,51 @@ async def upload_file(file: UploadFile = File(...), background_tasks: Background
         with open(temp_path, "wb") as f:
             f.write(contents)
 
-        # Offload heavy PDF parsing, chunking, and embedding to a background task
-        background_tasks.add_task(background_process_pdf, temp_path, file.filename)
+        # 1. Parse PDF synchronously so we know it succeeds
+        loader = PyPDFLoader(temp_path)
+        docs = loader.load()
+
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        chunks = text_splitter.split_documents(docs)
+
+        if not chunks:
+            raise HTTPException(status_code=400, detail="Could not extract text from PDF.")
+
+        # 2. Extract text contents for batch processing
+        chunk_texts = [chunk.page_content for chunk in chunks]
+
+        # 3. Batch embed all text chunks in a single ONNX pass
+        embeddings_generator = embedding_model.embed(chunk_texts)
+        embeddings_list = [vector.tolist() for vector in embeddings_generator]
+
+        points = []
+        for i, chunk in enumerate(chunks):
+            points.append(
+                PointStruct(
+                    id=str(uuid.uuid4()),
+                    vector=embeddings_list[i],
+                    payload={
+                        "document_name": file.filename,
+                        "page_number": chunk.metadata.get("page", 1),
+                        "text": chunk.page_content,
+                    },
+                )
+            )
+
+        # 4. Explicitly block and wait for Qdrant Cloud to confirm storage
+        qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
 
         return {
-            "message": "File upload received. Indexing started in the background.",
-            "filename": file.filename
+            "message": "File processed via FastEmbed and indexed successfully",
+            "filename": file.filename,
+            "chunks_count": len(chunks)
         }
 
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/api/query")
 def query_rag(body: QueryRequest):
