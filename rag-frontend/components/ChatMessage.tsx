@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { Message } from '@/types';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export default function ChatMessage({ message }: { message: Message }) {
   const [showCitations, setShowCitations] = useState(false);
@@ -14,9 +16,19 @@ export default function ChatMessage({ message }: { message: Message }) {
           ? 'bg-cyan-600 text-white rounded-br-xs'
           : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-xs'
       }`}>
-        <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+        
+        {/* Render assistant responses with Markdown support, user messages as plain text */}
+        {isUser ? (
+          <p className="whitespace-pre-wrap leading-relaxed">{message.content}</p>
+        ) : (
+          <div className="prose prose-invert max-w-none text-slate-200 text-sm leading-relaxed overflow-x-auto">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        )}
 
-        {/* Render Citation Accordeon for Assistant Responses */}
+        {/* Render Citation Accordion for Assistant Responses */}
         {!isUser && message.citations && message.citations.length > 0 && (
           <div className="mt-3 pt-2 border-t border-slate-800 text-xs">
             <button
