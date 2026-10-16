@@ -90,7 +90,7 @@ async def upload_file(file: UploadFile = File(...)):
         model = get_embedding_model()
 
         # 2. Process embeddings in optimized batches of 40 to protect RAM
-        BATCH_SIZE = 40
+        BATCH_SIZE = 20
         embeddings_list = []
         
         for i in range(0, len(chunk_texts), BATCH_SIZE):
