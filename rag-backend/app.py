@@ -9,11 +9,9 @@ from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_groq import ChatGroq
-# from langchain_huggingface import HuggingFaceEndpointEmbeddings
-from langchain_huggingface import HuggingFaceEmbeddings
+from fastembed import TextEmbedding
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
-
 
 load_dotenv()
 
@@ -39,17 +37,14 @@ try:
 except Exception:
     qdrant.create_collection(
         collection_name=COLLECTION_NAME,
-        # sentence-transformers/all-MiniLM-L6-v2 outputs 384 dimensions
+        # BAAI/bge-small-en-v1.5 outputs 384 dimensions
         vectors_config=VectorParams(size=384, distance=Distance.COSINE),
     )
 
-# Initialize Free Cloud Models (Groq + Hugging Face)
-# embeddings = HuggingFaceEndpointEmbeddings(
-#     model="sentence-transformers/all-MiniLM-L6-v2",
-#     huggingfacehub_api_token=os.getenv("HUGGINGFACEHUB_API_TOKEN")
-# )
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+# Initialize Lightweight FastEmbed (ONNX-based, low RAM footprint)
+embedding_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
 
+# Initialize Free Cloud LLM via Groq
 llm = ChatGroq(
     model="openai/gpt-oss-20b",
     temperature=0.2,
@@ -83,7 +78,10 @@ async def upload_file(file: UploadFile = File(...)):
 
         points = []
         for chunk in chunks:
-            vector = embeddings.embed_query(chunk.page_content)
+            # Generate embedding vector using FastEmbed
+            vector_generator = embedding_model.embed([chunk.page_content])
+            vector = list(vector_generator)[0].tolist()
+
             points.append(
                 PointStruct(
                     id=str(uuid.uuid4()),
@@ -99,7 +97,7 @@ async def upload_file(file: UploadFile = File(...)):
         qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
 
         return {
-            "message": "File processed via cloud APIs and indexed successfully",
+            "message": "File processed via FastEmbed and indexed successfully",
             "filename": file.filename,
             "chunks_count": len(chunks)
         }
@@ -119,10 +117,10 @@ def query_rag(body: QueryRequest):
         raise HTTPException(status_code=400, detail="Query string is required")
 
     try:
-        # 1. Generate query embedding
-        query_vector = embeddings.embed_query(user_query)
+        # Generate query vector using FastEmbed
+        query_vector_generator = embedding_model.embed([user_query])
+        query_vector = list(query_vector_generator)[0].tolist()
 
-        # 2. Search Qdrant using the updated query_points method
         response = qdrant.query_points(
             collection_name=COLLECTION_NAME,
             query=query_vector,
@@ -130,7 +128,6 @@ def query_rag(body: QueryRequest):
         )
         search_results = response.points
 
-        # 3. Extract retrieved text and citations
         retrieved_texts = []
         citations = []
 
@@ -145,7 +142,6 @@ def query_rag(body: QueryRequest):
 
         context_str = "\n\n---\n\n".join(retrieved_texts)
 
-        # 4. Prompt LLM via Groq
         prompt = f"""
 You are an expert assistant. Answer the question using ONLY the provided context below.
 If the answer cannot be found in the context, state clearly that you do not know.
@@ -164,6 +160,7 @@ User Question: {user_query}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/stats")
 def get_storage_stats():
