@@ -2,19 +2,19 @@
 
 An enterprise-ready, production-grade **Retrieval-Augmented Generation (RAG) System** built to convert unstructured PDF documents into an interactive, grounded knowledge base. 
 
-The application utilizes a modern **Next.js** frontend paired with a high-performance **FastAPI** backend. Document embeddings are computed locally using **SentenceTransformers** (`all-MiniLM-L6-v2`) and indexed into **Qdrant Cloud Vector Database** for sub-millisecond similarity search. Language generation is powered by **Groq**'s ultra-low latency Llama-3 inference engine, constrained strictly to retrieved context to eliminate hallucinations.
+The application utilizes a modern **Next.js** frontend paired with a high-performance **FastAPI** backend. Document embeddings are computed via lightweight, memory-efficient **FastEmbed (ONNX runtime)** using `BAAI/bge-small-en-v1.5` and indexed into **Qdrant Cloud Vector Database** for sub-millisecond similarity search. Language generation is powered by **Groq**'s ultra-low latency inference engine (`openai/gpt-oss-20b`), constrained strictly to retrieved context to eliminate hallucinations.
 
 ---
 
 ## 🌟 Key Features
 
-* **📄 PDF Processing & Ingestion:** Async upload handling with automatic text parsing, metadata tagging (filename, page numbers), and recursive character chunking ($1000$ chars, $200$ overlap).
-* **🧠 Zero-Cost Local Embeddings:** Runs `sentence-transformers/all-MiniLM-L6-v2` locally on CPU/GPU ($384$-dimensional vectors), completely bypassing cloud embedding API rate limits and costs.
-* **⚡ High-Speed Vector Retrieval:** Managed Qdrant Cloud integration using Cosine Distance metric for semantic search.
-* **🛡️ Grounded Context Generation:** Custom system prompts force the LLM to answer *strictly* using retrieved context, returning explicit source citations (document name, page number, and text snippet).
-* **📊 Real-Time Storage Monitor:** Real-time polling API endpoint showing vector count, estimated cluster memory usage, and capacity percentage.
-* **🧹 Knowledge Base Cleanup:** One-click clear endpoint to purge vector indexes and re-initialize vector spaces without cluster downtime.
-* **🎨 Modern UI/UX:** Dark-mode dashboard built with Tailwind CSS, TypeScript, active upload states, markdown rendering, and collapsible source drawers.
+- **📄 PDF Processing & Ingestion:** Synchronous chunk processing with automatic text parsing, metadata tagging (filename, page numbers), and recursive character chunking ($1000$ chars, $200$ overlap).
+- **🧠 Zero-Cost Lightweight Embeddings:** Uses **FastEmbed (ONNX)** with `BAAI/bge-small-en-v1.5` ($384$-dimensional vectors) running with a minimal memory footprint to stay safely under strict cloud free-tier RAM constraints ($512$ MB).
+- **⚡ High-Speed Vector Retrieval:** Managed Qdrant Cloud integration using Cosine Distance metric for semantic search, featuring single-payload bulk upsert operations.
+- **🛡️ Grounded Context Generation:** Custom system prompts force the LLM to answer *strictly* using retrieved context, returning explicit source citations (document name, page number, and text snippet).
+- **📊 Real-Time Storage Monitor:** API endpoint tracking vector count, estimated cluster memory usage, and capacity percentage.
+- **🧹 Knowledge Base Cleanup:** One-click clear endpoint to purge vector indexes and re-initialize vector spaces without cluster downtime.
+- **🎨 Modern UI/UX:** Dark-mode dashboard built with Tailwind CSS, TypeScript, active upload states, markdown rendering, and collapsible source drawers.
 
 ---
 
@@ -22,27 +22,27 @@ The application utilizes a modern **Next.js** frontend paired with a high-perfor
 
 ```text
 [ User Interface ] ── (1) Upload PDF ────────► [ FastAPI Backend ]
-       │                                              │
-       │                                       (2) Parse & Chunk Text
-       │                                              │
-       │                                       (3) Local Embeddings
-       │                                           (SentenceTransformers)
-       │                                              │
-       │                                              ▼
-       │                                    [ Qdrant Cloud Cluster ]
-       │                                    (384-dim Cosine Vectors)
-       │                                              │
-       ├── (4) Send Query ────────────────────────────┤
-       │                                              │ (5) Vector Similarity
-       │                                              │     Search (Top-K)
-       │                                              ▼
-       │                                     [ Grounded Context ]
-       │                                              │
-       │                                              ▼
-       │                                    [ Groq LLM Inference ]
-       │                                    (llama-3.3-70b / gpt-oss)
-       │                                              │
-       └── (6) Streamed Answer + Citations ───────────┘
+        │                                            │
+        │                                     (2) Parse & Chunk Text
+        │                                            │
+        │                                     (3) ONNX Embeddings
+        │                                         (FastEmbed)
+        │                                            │
+        │                                            ▼
+        │                                [ Qdrant Cloud Cluster ]
+        │                                (384-dim Cosine Vectors)
+        │                                            │
+        ├── (4) Send Query ──────────────────────────┤
+        │                                            │ (5) Vector Similarity
+        │                                            │     Search (Top-K)
+        │                                            ▼
+        │                                [ Grounded Context ]
+        │                                            │
+        │                                            ▼
+        │                                [ Groq LLM Inference ]
+        │                                (openai/gpt-oss-20b)
+        │                                            │
+        └── (6) Streamed Answer + Citations ─────────┘
 ```
 
 ---
@@ -50,18 +50,18 @@ The application utilizes a modern **Next.js** frontend paired with a high-perfor
 ## 🛠️ Tech Stack
 
 ### **Frontend**
-* **Framework:** Next.js (App Router, React 19)
-* **Language:** TypeScript
-* **Styling:** Tailwind CSS
-* **Icons & UI:** Lucide React, Framer Motion
+- **Framework:** Next.js (App Router, React 19)
+- **Language:** TypeScript
+- **Styling:** Tailwind CSS
+- **Icons & UI:** Lucide React, Framer Motion
 
 ### **Backend**
-* **Framework:** FastAPI (Python 3.11+)
-* **Orchestration:** LangChain Ecosystem
-* **PDF Processing:** PyPDF & LangChain Text Splitters
-* **Embeddings:** HuggingFace / SentenceTransformers (`all-MiniLM-L6-v2`)
-* **LLM Engine:** Groq Cloud API (`ChatGroq`)
-* **Vector Storage:** Qdrant Cloud DB (`qdrant-client`)
+- **Framework:** FastAPI (Python 3.11+)
+- **Orchestration:** LangChain Ecosystem
+- **PDF Processing:** PyPDF & LangChain Text Splitters
+- **Embeddings:** FastEmbed (ONNX Runtime, `BAAI/bge-small-en-v1.5`)
+- **LLM Engine:** Groq Cloud API (`ChatGroq`)
+- **Vector Storage:** Qdrant Cloud DB (`qdrant-client`)
 
 ---
 
@@ -69,10 +69,10 @@ The application utilizes a modern **Next.js** frontend paired with a high-perfor
 
 Before running the project, ensure you have the following installed and configured:
 
-* **Node.js:** v18.0.0 or higher
-* **Python:** v3.11 or higher
-* **Qdrant Cloud Account:** Free cluster tier ([qdrant.tech](https://qdrant.tech/))
-* **Groq API Key:** Free developer account ([console.groq.com](https://console.groq.com/))
+- **Node.js:** v18.0.0 or higher
+- **Python:** v3.11 or higher
+- **Qdrant Cloud Account:** Free cluster tier ([qdrant.tech](https://qdrant.tech/))
+- **Groq API Key:** Free developer account ([console.groq.com](https://console.groq.com/))
 
 ---
 
@@ -81,16 +81,16 @@ Before running the project, ensure you have the following installed and configur
 ```text
 rag-knowledge-engine/
 ├── rag-backend/
-│   ├── app.py               # Main FastAPI entry point & RAG pipeline logic
-│   ├── requirements.txt     # Python dependencies
-│   ├── Dockerfile           # Backend container definition
-│   └── .env                 # Backend environment variables
+│   ├── app.py              # Main FastAPI entry point & RAG pipeline logic
+│   ├── requirements.txt    # Python dependencies
+│   ├── Dockerfile          # Backend container definition
+│   └── .env                # Backend environment variables
 └── rag-frontend/
-    ├── app/                 # Next.js App Router
-    ├── components/          # Reusable UI components (Sidebar, Chat, Citations)
-    ├── types/               # TypeScript interface definitions
-    ├── Dockerfile           # Frontend container definition
-    └── .env.local           # Frontend environment variables
+    ├── app/                # Next.js App Router
+    ├── components/         # Reusable UI components (Sidebar, Chat, Citations)
+    ├── types/              # TypeScript interface definitions
+    ├── Dockerfile          # Frontend container definition
+    └── .env.local          # Frontend environment variables
 ```
 
 ---
@@ -175,7 +175,7 @@ docker run -d -p 3000:3000 -e NEXT_PUBLIC_API_URL="http://localhost:5000" rag-fr
 | Method | Endpoint | Description | Request Body / Parameters |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/health` | Service health status check. | None |
-| `POST` | `/api/upload` | Ingests PDF file, chunks text, generates embeddings, and uploads to Qdrant. | `multipart/form-data` (`file`: PDF) |
+| `POST` | `/api/upload` | Ingests PDF file, chunks text, generates ONNX embeddings, and uploads to Qdrant. | `multipart/form-data` (`file`: PDF) |
 | `POST` | `/api/query` | Executes similarity search & generates grounded answer with citations. | `{"query": "string"}` |
 | `GET` | `/api/stats` | Retrieves real-time Qdrant cluster vector stats & memory metrics. | None |
 | `POST` | `/api/clear` | Purges the active collection vector index and resets storage. | None |
@@ -184,8 +184,8 @@ docker run -d -p 3000:3000 -e NEXT_PUBLIC_API_URL="http://localhost:5000" rag-fr
 
 ## 💼 Resume Showcase Highlights
 
-* **End-to-End RAG Engineering:** Architected a high-throughput RAG platform capable of context-grounded retrieval and low-latency inference.
-* **Cost & Compute Optimization:** Eliminated third-party embedding costs by integrating local CPU-optimized `sentence-transformers`, reducing operational costs to **$0/month**.
-* **Strict Guardrails & Hallucination Suppression:** Implemented prompt engineering patterns and retrieval thresholding to guarantee accurate citations.
-* **Vector Storage Management:** Built custom lifecycle management logic using Qdrant vector spaces, including cluster capacity monitoring and collection purges.
-* **Production Deployment:** Configured for seamless 24/7 cloud deployment across Vercel (Frontend), Render (FastAPI), and Qdrant Cloud.
+- **End-to-End RAG Engineering:** Architected a high-throughput RAG platform capable of context-grounded retrieval and low-latency inference.
+- **RAM Optimization & Cloud Efficiency:** Utilized FastEmbed (ONNX runtime) with lazy-loading behavior to eliminate PyTorch-associated memory overhead, ensuring seamless execution within strict 512 MB cloud hosting limits (Render free tier).
+- **Strict Guardrails & Hallucination Suppression:** Implemented prompt engineering patterns and retrieval thresholding to guarantee accurate citations.
+- **Vector Storage Management:** Built custom lifecycle management logic using Qdrant vector spaces, including cluster capacity monitoring and collection purges.
+- **Production Deployment:** Configured for seamless 24/7 cloud deployment across Vercel (Frontend), Render (FastAPI), and Qdrant Cloud.
