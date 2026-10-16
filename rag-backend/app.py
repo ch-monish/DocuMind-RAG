@@ -76,6 +76,7 @@ async def upload_file(file: UploadFile = File(...)):
         with open(temp_path, "wb") as f:
             f.write(contents)
 
+        # 1. Parse PDF
         loader = PyPDFLoader(temp_path)
         docs = loader.load()
 
@@ -86,30 +87,32 @@ async def upload_file(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="Could not extract text from PDF.")
 
         chunk_texts = [chunk.page_content for chunk in chunks]
-
-        # Generate embeddings using lazy-loaded model instance
         model = get_embedding_model()
+
+        # 2. Generate embeddings in one single optimized pass
+        # FastEmbed handles lists natively and quickly for documents under ~50 pages
         embeddings_generator = model.embed(chunk_texts)
         embeddings_list = [vector.tolist() for vector in embeddings_generator]
 
-        points = []
-        for i, chunk in enumerate(chunks):
-            points.append(
-                PointStruct(
-                    id=str(uuid.uuid4()),
-                    vector=embeddings_list[i],
-                    payload={
-                        "document_name": file.filename,
-                        "page_number": chunk.metadata.get("page", 1),
-                        "text": chunk.page_content,
-                    },
-                )
+        # 3. Construct all points locally in memory (instant)
+        points = [
+            PointStruct(
+                id=str(uuid.uuid4()),
+                vector=embeddings_list[i],
+                payload={
+                    "document_name": file.filename,
+                    "page_number": chunk.metadata.get("page", 1),
+                    "text": chunk.page_content,
+                },
             )
+            for i, chunk in enumerate(chunks)
+        ]
 
+        # 4. FAST: Send ALL points to Qdrant Cloud in ONE single network request
         qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
 
         return {
-            "message": "File processed and indexed successfully",
+            "message": "File processed and indexed successfully at high speed",
             "filename": file.filename,
             "chunks_count": len(chunks)
         }
@@ -120,8 +123,6 @@ async def upload_file(file: UploadFile = File(...)):
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
-
-
 @app.post("/api/query")
 def query_rag(body: QueryRequest):
     user_query = body.query
