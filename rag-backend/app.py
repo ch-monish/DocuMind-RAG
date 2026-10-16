@@ -1,6 +1,6 @@
 import os
 import uuid
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -15,7 +15,7 @@ from qdrant_client.models import Distance, VectorParams, PointStruct
 
 load_dotenv()
 
-app = FastAPI(title="Free Cloud RAG Backend API", version="1.0")
+app = FastAPI(title="Optimized Cloud RAG Backend API", version="2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -37,12 +37,18 @@ try:
 except Exception:
     qdrant.create_collection(
         collection_name=COLLECTION_NAME,
-        # BAAI/bge-small-en-v1.5 outputs 384 dimensions
         vectors_config=VectorParams(size=384, distance=Distance.COSINE),
     )
 
 # Initialize Lightweight FastEmbed (ONNX-based, low RAM footprint)
 embedding_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
+
+# Pre-warm the embedding model on server startup to prevent first-request delays
+@app.on_event("startup")
+async def startup_event():
+    print("Pre-warming FastEmbed model...")
+    list(embedding_model.embed(["Pre-warming FastEmbed model"]))
+    print("FastEmbed model ready!")
 
 # Initialize Free Cloud LLM via Groq
 llm = ChatGroq(
@@ -56,13 +62,54 @@ class QueryRequest(BaseModel):
     query: str
 
 
+def background_process_pdf(temp_path: str, filename: str):
+    """Optimization 1 & 2: Background processing and batch vector embedding."""
+    try:
+        loader = PyPDFLoader(temp_path)
+        docs = loader.load()
+
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        chunks = text_splitter.split_documents(docs)
+
+        # Extract all text contents for batch processing
+        chunk_texts = [chunk.page_content for chunk in chunks]
+
+        # Batch embed all text chunks in a single optimized ONNX pass
+        embeddings_generator = embedding_model.embed(chunk_texts)
+        embeddings_list = [vector.tolist() for vector in embeddings_generator]
+
+        points = []
+        for i, chunk in enumerate(chunks):
+            points.append(
+                PointStruct(
+                    id=str(uuid.uuid4()),
+                    vector=embeddings_list[i],
+                    payload={
+                        "document_name": filename,
+                        "page_number": chunk.metadata.get("page", 1),
+                        "text": chunk.page_content,
+                    },
+                )
+            )
+
+        # Upsert to Qdrant Cloud
+        qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
+        print(f"Successfully indexed {len(chunks)} chunks for {filename}")
+
+    except Exception as e:
+        print(f"Error processing background PDF {filename}: {str(e)}")
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
 @app.get("/api/health")
 def health_check():
-    return {"status": "ok", "message": "Cloud RAG backend is running live!"}
+    return {"status": "ok", "message": "Optimized Cloud RAG backend is running live!"}
 
 
 @app.post("/api/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(file: UploadFile = File(...), background_tasks: BackgroundTasks = None):
     temp_path = f"./temp_{file.filename}"
     
     try:
@@ -70,43 +117,18 @@ async def upload_file(file: UploadFile = File(...)):
         with open(temp_path, "wb") as f:
             f.write(contents)
 
-        loader = PyPDFLoader(temp_path)
-        docs = loader.load()
-
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-        chunks = text_splitter.split_documents(docs)
-
-        points = []
-        for chunk in chunks:
-            # Generate embedding vector using FastEmbed
-            vector_generator = embedding_model.embed([chunk.page_content])
-            vector = list(vector_generator)[0].tolist()
-
-            points.append(
-                PointStruct(
-                    id=str(uuid.uuid4()),
-                    vector=vector,
-                    payload={
-                        "document_name": file.filename,
-                        "page_number": chunk.metadata.get("page", 1),
-                        "text": chunk.page_content,
-                    },
-                )
-            )
-
-        qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
+        # Offload heavy PDF parsing, chunking, and embedding to a background task
+        background_tasks.add_task(background_process_pdf, temp_path, file.filename)
 
         return {
-            "message": "File processed via FastEmbed and indexed successfully",
-            "filename": file.filename,
-            "chunks_count": len(chunks)
+            "message": "File upload received. Indexing started in the background.",
+            "filename": file.filename
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/query")
