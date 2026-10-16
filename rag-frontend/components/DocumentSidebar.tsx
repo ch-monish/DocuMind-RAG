@@ -29,7 +29,7 @@ export default function DocumentSidebar({ files, onFileUpload, onClearKB }: Docu
 
   useEffect(() => {
     fetchStats();
-    const interval = setInterval(fetchStats, 5000); // Poll every 5s
+    const interval = setInterval(fetchStats, 30000); // Poll every 30s
     return () => clearInterval(interval);
   }, [files]);
 
