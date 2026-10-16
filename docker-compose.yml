@@ -1,28 +1,16 @@
 version: '3.8'
 
 services:
-  db:
-    image: postgres:15-alpine
-    container_name: rag_postgres
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: rag_db
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-
   backend:
     build: ./rag-backend
-    container_name: rag_flask_backend
+    container_name: rag_fastapi_backend
     ports:
       - "5000:5000"
     environment:
-      - DATABASE_URL=postgresql://postgres:password@db:5432/rag_db
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-    depends_on:
-      - db
+      - QDRANT_URL=${QDRANT_URL}
+      - QDRANT_API_KEY=${QDRANT_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+    restart: unless-stopped
 
   frontend:
     build: ./rag-frontend
@@ -33,6 +21,4 @@ services:
       - NEXT_PUBLIC_API_URL=http://localhost:5000
     depends_on:
       - backend
-
-volumes:
-  pgdata:
+    restart: unless-stopped
