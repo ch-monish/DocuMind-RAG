@@ -89,17 +89,12 @@ async def upload_file(file: UploadFile = File(...)):
         chunk_texts = [chunk.page_content for chunk in chunks]
         model = get_embedding_model()
 
-        # 2. Process embeddings in optimized batches of 40 to protect RAM
-        BATCH_SIZE = 20
-        embeddings_list = []
-        
-        for i in range(0, len(chunk_texts), BATCH_SIZE):
-            batch_texts = chunk_texts[i:i + BATCH_SIZE]
-            batch_generator = model.embed(batch_texts)
-            for vector in batch_generator:
-                embeddings_list.append(vector.tolist())
+        # 2. Generate embeddings in one single optimized pass
+        # FastEmbed handles lists natively and quickly for documents under ~50 pages
+        embeddings_generator = model.embed(chunk_texts)
+        embeddings_list = [vector.tolist() for vector in embeddings_generator]
 
-        # 3. Construct all points locally
+        # 3. Construct all points locally in memory (instant)
         points = [
             PointStruct(
                 id=str(uuid.uuid4()),
@@ -113,12 +108,11 @@ async def upload_file(file: UploadFile = File(...)):
             for i, chunk in enumerate(chunks)
         ]
 
-        # 4. Upsert to Qdrant Cloud in bulk batches of 50 to ensure network reliability
-        for i in range(0, len(points), 50):
-            qdrant.upsert(collection_name=COLLECTION_NAME, points=points[i:i + 50])
+        # 4. FAST: Send ALL points to Qdrant Cloud in ONE single network request
+        qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
 
         return {
-            "message": "File processed and indexed successfully with batch size 40",
+            "message": "File processed and indexed successfully at high speed",
             "filename": file.filename,
             "chunks_count": len(chunks)
         }
@@ -131,6 +125,7 @@ async def upload_file(file: UploadFile = File(...)):
             os.remove(temp_path)
 
 
+            
 @app.post("/api/query")
 def query_rag(body: QueryRequest):
     user_query = body.query
