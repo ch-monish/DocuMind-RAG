@@ -182,7 +182,7 @@ docker run -d -p 3000:3000 -e NEXT_PUBLIC_API_URL="http://localhost:5000" rag-fr
 
 ---
 
-## 💼 Resume Showcase Highlights
+## 💼  Highlights
 
 - **End-to-End RAG Engineering:** Architected a high-throughput RAG platform capable of context-grounded retrieval and low-latency inference.
 - **RAM Optimization & Cloud Efficiency:** Utilized FastEmbed (ONNX runtime) with lazy-loading behavior to eliminate PyTorch-associated memory overhead, ensuring seamless execution within strict 512 MB cloud hosting limits (Render free tier).
